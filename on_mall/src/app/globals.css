@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+
+h1 {
+  font-size: large;
+}
