@@ -1,4 +1,4 @@
-// This is your Prisma schema file,
+// This is your Prisma schema file, as below
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
@@ -6,7 +6,6 @@
 
 generator client {
   provider = "prisma-client-js"
-  // output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -14,17 +13,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// AUTH BOILERPLATE 
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean
-  image         String?
-  createdAt     DateTime
-  updatedAt     DateTime
-  role          String?
-  sessions      Session[]
-  accounts      Account[]
+  id                      String             @id
+  name                    String
+  email                   String
+  emailVerified           Boolean            @default(false)
+  phoneNumberVerification PhoneVerification?
+  image                   String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  // Align with Better Auth additionalFields type
+  role                    Role               @default(CUSTOMER)
+
+  // relations
+  sessions Session[]
+  accounts Account[]
+  vendor   Vendor?
+  orders   Order[]
+  carts    Cart[]
 
   @@unique([email])
   @@map("user")
@@ -34,8 +41,8 @@ model Session {
   id        String   @id
   expiresAt DateTime
   token     String
-  createdAt DateTime
-  updatedAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   ipAddress String?
   userAgent String?
   userId    String
@@ -58,8 +65,8 @@ model Account {
   refreshTokenExpiresAt DateTime?
   scope                 String?
   password              String?
-  createdAt             DateTime
-  updatedAt             DateTime
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@map("account")
 }
@@ -69,8 +76,210 @@ model Verification {
   identifier String
   value      String
   expiresAt  DateTime
-  createdAt  DateTime?
-  updatedAt  DateTime?
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
 
   @@map("verification")
+}
+
+// BUSINESS LOGIC 
+model Vendor {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopName    String
+  description String?
+  approved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+  kyc      KYC[]
+}
+
+model KYC {
+  id        String        @id @default(uuid())
+  vendorId  String        @unique
+  vendor    Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  documents KYCDocument[] // Cloudinary URLs for docs
+  status    String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model KYCDocument {
+  id           String   @id @default(uuid())
+  url          String? // Cloudinary URL
+  documentType DocType
+  public_id    String
+  kycId        String
+  kyc          KYC      @relation(fields: [kycId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+}
+
+model PhoneVerification {
+  id        String   @id @default(uuid())
+  phone     String
+  otp       String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+}
+
+// CATALOG 
+model Category {
+  id       String     @id @default(uuid())
+  name     String
+  slug     String     @unique
+  parentId String?
+  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryToCategory")
+  products Product[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  stock       Int      @default(0)
+  images      String[] // Cloudinary URLs
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+  flashSales FlashSale[]
+}
+
+// CART
+model Cart {
+  id        String   @id @default(uuid())
+  // Either userId or guestId is set. We enforce one-cart-per-user/guest via uniques below.
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  guestId   String? // derive from cookie (e.g., a signed token or UUID stored client-side)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items CartItem[]
+
+  @@unique([userId])
+  @@unique([guestId])
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+  price     Decimal  @db.Decimal(10, 2) // snapshot of price at time of adding (optional)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId])
+  @@index([productId])
+}
+
+// FLASH SALE
+model FlashSale {
+  id            String   @id @default(uuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  salePrice     Decimal  @db.Decimal(10, 2)
+  startsAt      DateTime
+  endsAt        DateTime
+  maxQtyPerUser Int? // optional per-user limit
+  totalQty      Int? // optional global cap
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([productId])
+  @@index([startsAt, endsAt])
+}
+
+//  ORDERS & DELIVERY
+model Order {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  status        OrderStatus   @default(PENDING)
+  paymentMethod PaymentMethod @default(COD)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items    OrderItem[]
+  delivery Delivery?
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal @db.Decimal(10, 2)
+}
+
+model Delivery {
+  id         String         @id @default(uuid())
+  orderId    String         @unique
+  order      Order          @relation(fields: [orderId], references: [id])
+  address    String
+  city       String
+  postalCode String
+  country    String
+  status     DeliveryStatus @default(PENDING)
+  trackingId String?
+  updatedAt  DateTime       @updatedAt
+}
+
+// ENUM
+enum Role {
+  ADMIN
+  VENDOR
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  DISPATCHED
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+}
+
+enum PaymentMethod {
+  COD
+  ONLINE
+}
+
+enum DocType {
+  CNIC
+  PASSPORT
+  LICENSE
 }

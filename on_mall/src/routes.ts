@@ -1,19 +1,23 @@
 // routes.ts
 
 // Routes used for authentication (should redirect if already logged in)
-export const authRoutes = ['/auth/sign-in'];
+export const authRoutes = ['/auth/sign-in', '/auth/sign-up'];
 
 // Routes accessible without login (e.g. landing page or sign-in)
 export const publicRoutes = [
-  '/', 
-  '/auth/sign-in', 
-  '/auth/sign-up', 
-  '/auth/error', 
+  '/',
+  '/auth/sign-in',
+  '/auth/sign-up',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/verify-email',
+  '/auth/check-email',
+  '/auth/error',
   '/auth/unauthorized',
-  '/about', 
-  '/contact', 
-  '/privacy', 
-  '/terms'
+  '/about',
+  '/contact',
+  '/privacy',
+  '/terms',
 ];
 
 // Sign-in redirect fallback

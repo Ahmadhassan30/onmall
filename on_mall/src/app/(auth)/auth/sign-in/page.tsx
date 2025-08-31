@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
 import { Loader2, Eye, EyeOff, ArrowLeft, Shield, Truck, Heart } from "lucide-react";
-import { signIn } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -27,7 +27,7 @@ export default function SignIn() {
       return;
     }
 
-    await signIn.email(
+    await authClient.signIn.email(
       {
         email,
         password,
@@ -43,7 +43,22 @@ export default function SignIn() {
           toast.success("Welcome back to OnMall!");
           router.push("/"); // Redirect to home page
         },
-        onError: (ctx) => {
+        onError: async (ctx) => {
+          // If email verification required, server returns 403
+          if ((ctx.error as any)?.status === 403) {
+            try {
+              await authClient.sendVerificationEmail({
+                email,
+                callbackURL: `${window.location.origin}/auth/verify-email`,
+              });
+            } catch (e) {
+              // ignore, still route to check-email
+            }
+            const search = new URLSearchParams({ email }).toString();
+            toast.error("Please verify your email. We sent you a verification link.");
+            router.push(`/auth/check-email?${search}`);
+            return;
+          }
           toast.error(ctx.error.message || "Failed to sign in");
         },
       }
@@ -51,7 +66,7 @@ export default function SignIn() {
   };
 
   const handleGoogleSignIn = async () => {
-    await signIn.social(
+  await authClient.signIn.social(
       {
         provider: "google",
         callbackURL: "/", // Redirect to home page
@@ -227,7 +242,7 @@ export default function SignIn() {
                       Remember me
                     </Label>
                   </div>
-                  <Link href="#" className="text-sm text-orange-600 hover:text-orange-500">
+                  <Link href="/auth/forgot-password" className="text-sm text-orange-600 hover:text-orange-500">
                     Forgot password?
                   </Link>
                 </div>

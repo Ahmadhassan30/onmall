@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
 import { Loader2, Eye, EyeOff, ArrowLeft, Shield, Truck, Heart, Check } from "lucide-react";
-import { signUp } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -48,26 +48,35 @@ export default function SignUp() {
       return;
     }
 
-    await signUp.email({
-      email,
-      password,
-      name: `${firstName} ${lastName}`,
-      fetchOptions: {
-        onRequest: () => {
-          setLoading(true);
-        },
-        onResponse: () => {
-          setLoading(false);
-        },
+    await authClient.signUp.email(
+      {
+        email,
+        password,
+        name: `${firstName} ${lastName}`,
+      },
+      {
+        onRequest: () => setLoading(true),
+        onResponse: () => setLoading(false),
         onError: (ctx) => {
           toast.error(ctx.error.message || "Failed to create account");
         },
-        onSuccess: () => {
-          toast.success("Account created successfully! Welcome to OnMall!");
-          router.push("/"); // Redirect to home page
+        onSuccess: async () => {
+          // send verification email explicitly after sign up
+          try {
+            await authClient.sendVerificationEmail({
+              email,
+              callbackURL: `${window.location.origin}/auth/verify-email`,
+            });
+          } catch (e) {
+            // non-blocking; still route to check-email
+            console.error("Failed to send verification email:", e);
+          }
+          toast.success("Account created! Please verify your email to continue.");
+          const search = new URLSearchParams({ email }).toString();
+          router.push(`/auth/check-email?${search}`);
         },
-      },
-    });
+      }
+    );
   };
 
   return (
