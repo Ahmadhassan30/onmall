@@ -87,7 +87,7 @@ model Vendor {
   id          String   @id @default(uuid())
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  shopName    String
+  shopName    String   @unique
   description String?
   approved    Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -102,7 +102,7 @@ model KYC {
   vendorId  String        @unique
   vendor    Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   documents KYCDocument[] // Cloudinary URLs for docs
-  status    String?
+  status    Status        @default(Pending)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 }
@@ -134,7 +134,7 @@ model PhoneVerification {
 model Category {
   id       String     @id @default(uuid())
   name     String
-  slug     String     @unique
+  slug     String?     @unique
   parentId String?
   parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
   children Category[] @relation("CategoryToCategory")
@@ -142,15 +142,16 @@ model Category {
 }
 
 model Product {
-  id          String   @id @default(uuid())
+  id          String        @id @default(uuid())
   name        String
-  slug        String   @unique
+  slug        String?        @unique
   description String?
-  price       Decimal  @db.Decimal(10, 2)
-  stock       Int      @default(0)
-  images      String[] // Cloudinary URLs
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  price       Decimal       @db.Decimal(10, 2)
+  stock       Int           @default(0)
+  images      ProductImg[] // Cloudinary URLs
+  video       ProductVideo?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   vendorId String
   vendor   Vendor @relation(fields: [vendorId], references: [id])
@@ -161,6 +162,24 @@ model Product {
   orderItems OrderItem[]
   cartItems  CartItem[]
   flashSales FlashSale[]
+}
+
+model ProductImg {
+  id        String   @id @default(uuid())
+  url       String
+  public_id String
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model ProductVideo {
+  id        String   @id @default(uuid())
+  url       String
+  public_id String
+  productId String   @unique
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 }
 
 // CART
@@ -282,4 +301,10 @@ enum DocType {
   CNIC
   PASSPORT
   LICENSE
+}
+
+enum Status {
+  Pending
+  Approved
+  Rejected
 }

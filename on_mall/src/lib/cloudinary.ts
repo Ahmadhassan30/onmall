@@ -1,79 +1,26 @@
 import { v2 as cloudinary } from 'cloudinary';
 
-// Configure Cloudinary with security settings
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true,
-});
-
-// Secure upload function for KYC documents
-export async function uploadKYCDocument(
-  file: Buffer,
-  options: {
-    vendorId: string;
-    documentType: string;
-    filename: string;
+export function assertCloudinaryEnv() {
+  const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env as Record<string, string | undefined>;
+  const missing: string[] = [];
+  if (!CLOUDINARY_CLOUD_NAME) missing.push('CLOUDINARY_CLOUD_NAME');
+  if (!CLOUDINARY_API_KEY) missing.push('CLOUDINARY_API_KEY');
+  if (!CLOUDINARY_API_SECRET) missing.push('CLOUDINARY_API_SECRET');
+  if (missing.length) {
+    const msg = `Cloudinary env missing: ${missing.join(', ')}`;
+    return { ok: false as const, message: msg };
   }
-) {
-  const { vendorId, documentType, filename } = options;
-
-  const folder = `kyc_documents/${vendorId}`;
-  const publicId = `${folder}/${documentType}_${Date.now()}_${filename.split('.')[0]}`;
-
-  return new Promise<any>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        public_id: publicId,
-        resource_type: 'auto',
-        type: 'authenticated', // Upload as authenticated asset
-        access_mode: 'authenticated',
-        invalidate: false,
-        overwrite: false,
-        unique_filename: true,
-        use_filename: false,
-        quality: 'auto:eco',
-        format: 'auto',
-        transformation: [
-          { width: 2000, height: 2000, crop: 'limit' },
-          { quality: 'auto:good' },
-        ],
-        context: {
-          vendor: vendorId,
-          documentType,
-        },
-      },
-      (error, result) => {
-        if (error) return reject(error);
-        resolve(result);
-      }
-    );
-
-    stream.end(file);
-  });
+  return { ok: true as const };
 }
 
-// Generate secure signed URL for viewing KYC documents
-export function generateSecureKYCUrl(publicId: string) {
-  // Signed URL for authenticated asset
-  return cloudinary.url(publicId, {
-    type: 'authenticated',
-    sign_url: true,
-    expires_at: Math.floor(Date.now() / 1000) + 60 * 60, // 1 hour
+// Configure once per runtime for product uploads
+const envOk = assertCloudinaryEnv();
+if (envOk.ok) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
     secure: true,
-    transformation: [
-      { quality: 'auto:good' },
-      { fetch_format: 'auto' },
-    ],
-  });
-}
-
-// Delete KYC document securely
-export async function deleteKYCDocument(publicId: string) {
-  return cloudinary.uploader.destroy(publicId, {
-    type: 'authenticated',
-    invalidate: true,
   });
 }
 

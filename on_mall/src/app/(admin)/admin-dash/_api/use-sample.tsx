@@ -1,15 +1,15 @@
 import { client } from '@/lib/hono';
 import { useQuery } from '@tanstack/react-query';
-import { InferResponseType } from 'hono';
 
-// Infer the response type of GET /sample
-type ResponseType = InferResponseType<(typeof client.api.sample)['$get']>;
+// Use a loosely-typed client locally
+const api = client as any;
+type ResponseType = any;
 
 export const useSampleGet = (errorMessage?: string) => {
   return useQuery<ResponseType, Error>({
     queryKey: ['sample', errorMessage], // unique key for caching
     queryFn: async () => {
-      const response = await client.api.sample.$get({
+  const response = await api.sample.$get({
         query: errorMessage ? { errorMessage } : {},
       });
 

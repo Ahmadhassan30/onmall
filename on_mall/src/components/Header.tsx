@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,32 @@ import {
 const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const { data: session, isPending } = useSession();
+
+  // Listen for cart updates
+  useEffect(() => {
+    const fetchCartCount = async () => {
+      try {
+        const res = await fetch('/api/cart', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setCartCount(data.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0);
+        }
+      } catch (error) {
+        console.error('Failed to fetch cart count:', error);
+      }
+    };
+
+    fetchCartCount();
+
+    const handleCartUpdate = () => {
+      fetchCartCount();
+    };
+
+    window.addEventListener('cartUpdated', handleCartUpdate);
+    return () => window.removeEventListener('cartUpdated', handleCartUpdate);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -189,12 +214,14 @@ const Header = () => {
               </button>
 
               {/* Cart */}
-              <button className="p-2 hover:bg-gray-100 rounded-full transition-colors relative">
+              <Link href="/cart" className="p-2 hover:bg-gray-100 rounded-full transition-colors relative">
                 <CartIcon className="w-5 h-5 text-gray-600" />
-                <Badge className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-500 text-white text-xs flex items-center justify-center p-0">
-                  4
-                </Badge>
-              </button>
+                {cartCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-500 text-white text-xs flex items-center justify-center p-0">
+                    {cartCount}
+                  </Badge>
+                )}
+              </Link>
 
               {/* Mobile Menu */}
               <button
