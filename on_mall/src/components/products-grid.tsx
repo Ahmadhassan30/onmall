@@ -12,6 +12,7 @@ type Product = {
   id: string;
   name: string;
   price: number | string;
+  discountPrice?: number | string | null;
   images?: { url: string }[];
   video?: { url: string } | null;
 };
@@ -85,11 +86,28 @@ export default function ProductsGrid() {
             {!p.images?.[0]?.url && p.video?.url && (
               <video className="w-full h-40 rounded mb-2" controls src={p.video.url} />
             )}
-            <div className="text-sm mb-2">
-              {(() => {
-                const n = typeof p.price === 'number' ? p.price : parseFloat(String(p.price));
-                return Number.isFinite(n) ? `$${n.toFixed(2)}` : `$${String(p.price)}`;
-              })()}
+            <div className="text-sm mb-2 flex items-baseline space-x-2">
+              {p.discountPrice ? (
+                <>
+                  {(() => {
+                    const orig = Number(p.price);
+                    const disc = Number(p.discountPrice);
+                    const pct = orig > 0 && disc > 0 && disc < orig ? Math.round((orig - disc) / orig * 100) : null;
+                    return (
+                      <>
+                        <span className="text-orange-600 font-semibold">${disc.toFixed ? disc.toFixed(2) : Number(disc).toFixed(2)}</span>
+                        <span className="line-through text-gray-400 text-xs">${orig.toFixed ? orig.toFixed(2) : Number(orig).toFixed(2)}</span>
+                        {pct !== null && <span className="text-green-600 text-xs font-medium">-{pct}%</span>}
+                      </>
+                    );
+                  })()}
+                </>
+              ) : (
+                (() => {
+                  const n = typeof p.price === 'number' ? p.price : parseFloat(String(p.price));
+                  return Number.isFinite(n) ? `$${n.toFixed(2)}` : `$${String(p.price)}`;
+                })()
+              )}
             </div>
           </Link>
           <QuickAddToCart productId={p.id} />

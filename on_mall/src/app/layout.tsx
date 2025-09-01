@@ -4,6 +4,7 @@ import "./globals.css";
 import { ReactQueryProvider } from "@/providers/react-query-provider";
 import { Toaster } from "sonner";
 import { ConditionalHeader } from "../components/ConditionalHeader";
+import { RouteLoaderProvider } from "@/components";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,11 +37,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ReactQueryProvider>
-          <ConditionalHeader />
-          <main className="min-h-screen">
-            {children}
-          </main>
-          <Toaster position="top-right" />
+          <RouteLoaderProvider>
+            <ConditionalHeader />
+            <main className="min-h-screen">
+              {children}
+            </main>
+            <Toaster position="top-right" />
+          </RouteLoaderProvider>
         </ReactQueryProvider>
       </body>
     </html>

@@ -19,6 +19,7 @@ type Product = {
   name: string;
   slug: string;
   price: number | string;
+  discountPrice?: number | string | null;
   stock: number;
   description?: string | null;
   categoryId?: string | null;
@@ -40,6 +41,7 @@ export default function EditProductPage() {
     name: '',
     slug: '',
     price: '',
+  discountPrice: '',
     stock: '0',
     description: '',
     categoryId: '',
@@ -70,6 +72,7 @@ export default function EditProductPage() {
           name: p.name,
           slug: p.slug,
           price: String(typeof p.price === 'number' ? p.price : parseFloat(String(p.price))),
+          discountPrice: p.discountPrice ? String(typeof p.discountPrice === 'number' ? p.discountPrice : parseFloat(String(p.discountPrice))) : '',
           stock: String(p.stock),
           description: p.description || '',
           categoryId: p.categoryId || '',
@@ -103,7 +106,7 @@ export default function EditProductPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const body: any = {
+  const body: any = {
         id,
         name: form.name,
         slug: form.slug,
@@ -112,6 +115,7 @@ export default function EditProductPage() {
         stock: Number(form.stock) || 0,
         categoryId: form.categoryId || undefined,
       };
+  if (form.discountPrice) body.discountPrice = Number(form.discountPrice); else if (product?.discountPrice && !form.discountPrice) body.discountPrice = null;
       if (images !== undefined) body.images = images; // replace if set
       if (video !== undefined) body.video = video; // replace if set; send null to remove
 
@@ -147,6 +151,18 @@ export default function EditProductPage() {
             <div>
               <Label htmlFor="price">Price</Label>
               <Input id="price" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+            </div>
+            <div>
+              <Label htmlFor="discountPrice">Discount Price (optional)</Label>
+              <Input id="discountPrice" type="number" step="0.01" value={form.discountPrice} onChange={(e) => setForm({ ...form, discountPrice: e.target.value })} />
+              {form.price && form.discountPrice && Number(form.price) > 0 && Number(form.discountPrice) > 0 && Number(form.discountPrice) < Number(form.price) && (
+                <div className="text-xs text-green-600 mt-1 font-medium">
+                  {Math.round(((Number(form.price) - Number(form.discountPrice)) / Number(form.price)) * 100)}% OFF
+                </div>
+              )}
+              {product?.discountPrice && !form.discountPrice && (
+                <div className="text-xs text-amber-600 mt-1">Current discount will be removed on save.</div>
+              )}
             </div>
             <div>
               <Label htmlFor="stock">Stock</Label>

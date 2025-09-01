@@ -22,6 +22,10 @@ const Header = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+  const [vendor, setVendor] = useState<any | null>(null);
+  const [vendorLoading, setVendorLoading] = useState(false);
+  const [categories, setCategories] = useState<{ id: string; name: string; slug?: string | null }[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const { data: session, isPending } = useSession();
 
   // Listen for cart updates
@@ -52,16 +56,55 @@ const Header = () => {
     await signOut();
   };
 
-  const categories = [
-    "Electronics",
-    "Fashion",
-    "Home & Garden",
-    "Sports",
-    "Books",
-    "Beauty",
-    "Automotive",
-    "Toys",
-  ];
+  // Fetch current vendor (for dynamic Seller Center link) & categories
+  useEffect(() => {
+    let abort = false;
+    const fetchVendor = async () => {
+      if (!session?.user) { setVendor(null); return; }
+      setVendorLoading(true);
+      try {
+        const res = await fetch('/api/vendor/me', { credentials: 'include' });
+        if (!res.ok) throw new Error('Failed vendor');
+        const data = await res.json();
+        if (!abort) setVendor(data.vendor || null);
+      } catch (e) {
+        if (!abort) setVendor(null);
+      } finally {
+        if (!abort) setVendorLoading(false);
+      }
+    };
+    fetchVendor();
+    return () => { abort = true; };
+  }, [session?.user]);
+
+  useEffect(() => {
+    let abort = false;
+    const fetchCategories = async () => {
+      setCategoriesLoading(true);
+      try {
+        const res = await fetch('/api/category');
+        if (!res.ok) throw new Error('Failed categories');
+        const data = await res.json();
+        if (!abort) setCategories(data);
+      } catch (e) {
+        if (!abort) setCategories([
+          { id: 'fallback-1', name: 'Electronics' },
+          { id: 'fallback-2', name: 'Fashion' },
+          { id: 'fallback-3', name: 'Home & Garden' },
+          { id: 'fallback-4', name: 'Sports' },
+        ]);
+      } finally {
+        if (!abort) setCategoriesLoading(false);
+      }
+    };
+    fetchCategories();
+    return () => { abort = true; };
+  }, []);
+
+  const userRole = (session?.user as any)?.role as string | undefined;
+  const isAdmin = userRole === 'ADMIN';
+  const hasVendor = !!vendor;
+  const vendorApproved = vendor?.approved;
 
   return (
     <header className="w-full bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -77,9 +120,22 @@ const Header = () => {
 
             {/* Right side - Links */}
             <div className="hidden md:flex items-center space-x-6 text-gray-600">
-              <Link href="/seller" className="hover:text-orange-500 transition-colors">
-                Sell on OnMall
-              </Link>
+              {vendorLoading ? (
+                <span className="text-gray-400">Loading...</span>
+              ) : hasVendor ? (
+                <Link href="/vendor-center/seller-dash" className="hover:text-orange-500 transition-colors">
+                  Seller Center
+                </Link>
+              ) : (
+                <Link href="/vendor-register" className="hover:text-orange-500 transition-colors">
+                  Become a Seller
+                </Link>
+              )}
+              {isAdmin && (
+                <Link href="/admin-dash" className="hover:text-orange-500 transition-colors">
+                  Admin
+                </Link>
+              )}
               <Link href="/help" className="hover:text-orange-500 transition-colors">
                 Customer Care
               </Link>
@@ -239,14 +295,17 @@ const Header = () => {
       <div className="border-t border-gray-100 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center h-12 overflow-x-auto scrollbar-hide">
-            <div className="flex items-center space-x-8 min-w-max">
-              {categories.map((category) => (
+            <div className="flex items-center space-x-8 min-w-max relative">
+              {categoriesLoading && (
+                <span className="text-xs text-gray-400">Loading categories...</span>
+              )}
+              {categories.map((c) => (
                 <Link
-                  key={category}
-                  href={`/category/${category.toLowerCase()}`}
+                  key={c.id}
+                  href={`/category/${(c.slug || c.name).toLowerCase()}`}
                   className="text-sm text-gray-600 hover:text-orange-500 transition-colors whitespace-nowrap"
                 >
-                  {category}
+                  {c.name}
                 </Link>
               ))}
               <Link
@@ -261,6 +320,14 @@ const Header = () => {
               >
                 ✨ New Arrivals
               </Link>
+              {hasVendor && !vendorApproved && (
+                <Link
+                  href="/kyc"
+                  className="text-sm text-amber-600 font-medium hover:text-amber-700 transition-colors whitespace-nowrap"
+                >
+                  KYC Pending
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -346,9 +413,22 @@ const Header = () => {
 
               {/* Mobile Menu Items */}
               <div className="space-y-4">
-                <Link href="/seller" className="block py-2 text-gray-700 hover:text-orange-500">
-                  Sell on OnMall
-                </Link>
+                {vendorLoading ? (
+                  <div className="py-2 text-gray-400">Loading seller data...</div>
+                ) : hasVendor ? (
+                  <Link href="/vendor-center/seller-dash" className="block py-2 text-gray-700 hover:text-orange-500">
+                    Seller Center
+                  </Link>
+                ) : (
+                  <Link href="/vendor-register" className="block py-2 text-gray-700 hover:text-orange-500">
+                    Become a Seller
+                  </Link>
+                )}
+                {isAdmin && (
+                  <Link href="/admin-dash" className="block py-2 text-gray-700 hover:text-orange-500">
+                    Admin Dashboard
+                  </Link>
+                )}
                 <Link href="/help" className="block py-2 text-gray-700 hover:text-orange-500">
                   Customer Care
                 </Link>
@@ -357,15 +437,23 @@ const Header = () => {
                 </Link>
                 <div className="border-t pt-4">
                   <h3 className="font-medium mb-2">Categories</h3>
-                  {categories.map((category) => (
+                  {categories.map((c) => (
                     <Link
-                      key={category}
-                      href={`/category/${category.toLowerCase()}`}
+                      key={c.id}
+                      href={`/category/${(c.slug || c.name).toLowerCase()}`}
                       className="block py-2 text-sm text-gray-600 hover:text-orange-500"
                     >
-                      {category}
+                      {c.name}
                     </Link>
                   ))}
+                  {hasVendor && !vendorApproved && (
+                    <Link
+                      href="/kyc"
+                      className="block py-2 text-sm text-amber-600 hover:text-amber-700 font-medium"
+                    >
+                      KYC Pending
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>

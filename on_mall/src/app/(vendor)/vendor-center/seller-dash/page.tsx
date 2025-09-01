@@ -44,6 +44,7 @@ export default function SellerDashPage() {
     name: '',
     slug: '',
     price: '',
+  discountPrice: '',
     stock: '0',
     description: '',
     categoryId: '',
@@ -97,7 +98,7 @@ export default function SellerDashPage() {
     e.preventDefault();
     try {
       setUploading(true);
-      const body = {
+  const body: any = {
         name: form.name,
         slug: form.slug,
         description: form.description || undefined,
@@ -107,6 +108,7 @@ export default function SellerDashPage() {
         images: images.length ? images : undefined,
         video: video ? video : undefined,
       };
+  if (form.discountPrice) body.discountPrice = Number(form.discountPrice);
       const created = await fetchJSON('/api/product', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,7 +117,7 @@ export default function SellerDashPage() {
       // refresh vendor profile to show new product
       const refreshed = await fetchJSON('/api/vendor/profile');
       setVendor(refreshed);
-      setForm({ name: '', slug: '', price: '', stock: '0', description: '', categoryId: '' });
+  setForm({ name: '', slug: '', price: '', discountPrice: '', stock: '0', description: '', categoryId: '' });
       setImages([]);
       setVideo(null);
     } catch (e: any) {
@@ -167,6 +169,15 @@ export default function SellerDashPage() {
             <div>
               <Label htmlFor="price">Price</Label>
               <Input id="price" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+            </div>
+            <div>
+              <Label htmlFor="discountPrice">Discount Price (optional)</Label>
+              <Input id="discountPrice" type="number" step="0.01" value={form.discountPrice} onChange={(e) => setForm({ ...form, discountPrice: e.target.value })} />
+              {form.price && form.discountPrice && Number(form.price) > 0 && Number(form.discountPrice) > 0 && Number(form.discountPrice) < Number(form.price) && (
+                <div className="text-xs text-green-600 mt-1 font-medium">
+                  {Math.round(((Number(form.price) - Number(form.discountPrice)) / Number(form.price)) * 100)}% OFF
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="stock">Stock</Label>

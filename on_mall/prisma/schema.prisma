@@ -147,6 +147,8 @@ model Product {
   slug        String?        @unique
   description String?
   price       Decimal       @db.Decimal(10, 2)
+  // When set, represents the discounted sale price ("current" price). Discount % = (price - discountPrice) / price * 100
+  discountPrice Decimal?    @db.Decimal(10, 2)
   stock       Int           @default(0)
   images      ProductImg[] // Cloudinary URLs
   video       ProductVideo?

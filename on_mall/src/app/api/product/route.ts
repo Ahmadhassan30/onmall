@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
   const categoryId = url.searchParams.get('categoryId') || undefined;
   const vendorId = url.searchParams.get('vendorId') || undefined;
   const sort = (url.searchParams.get('sort') as 'new' | 'price_asc' | 'price_desc') || 'new';
+  const flash = url.searchParams.get('flash'); // if 'true', only return products with >=50% discount
 
   const where: any = {};
   if (search) where.name = { contains: search, mode: 'insensitive' as const };
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   const orderBy = sort === 'price_asc' ? { price: 'asc' as const } : sort === 'price_desc' ? { price: 'desc' as const } : { createdAt: 'desc' as const };
 
-  const [items, total] = await Promise.all([
+  const [itemsRaw, total] = await Promise.all([
     prisma.product.findMany({
       where,
       skip: (page - 1) * limit,
@@ -36,6 +37,23 @@ export async function GET(req: NextRequest) {
     prisma.product.count({ where }),
   ]);
 
+  let items = itemsRaw as any[];
+  if (flash === 'true') {
+    items = items.filter(p => {
+      if (!p.discountPrice) return false;
+      const orig = Number(p.price);
+      const disc = Number(p.discountPrice);
+      if (!isFinite(orig) || !isFinite(disc) || orig <= 0 || disc <= 0 || disc >= orig) return false;
+      const pct = (orig - disc) / orig * 100;
+      return pct >= 50; // 50% or more discount
+    }).sort((a, b) => {
+      // sort by highest discount percentage desc
+      const da = (Number(a.price) - Number(a.discountPrice)) / Number(a.price);
+      const db = (Number(b.price) - Number(b.discountPrice)) / Number(b.price);
+      return db - da;
+    });
+  }
+
   return NextResponse.json({ items, page, limit, total });
 }
 
@@ -49,8 +67,14 @@ export async function POST(req: NextRequest) {
   const name = body?.name;
   const slug = body?.slug;
   const price = Number(body?.price);
+  const discountPrice = body?.discountPrice !== undefined ? Number(body.discountPrice) : undefined;
   if (!name || !slug || !Number.isFinite(price) || price <= 0) {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
+  }
+  if (discountPrice !== undefined) {
+    if (!Number.isFinite(discountPrice) || discountPrice <= 0 || discountPrice >= price) {
+      return NextResponse.json({ error: 'Invalid discountPrice (must be >0 and < price)' }, { status: 400 });
+    }
   }
 
   const me: any = user;
@@ -63,7 +87,8 @@ export async function POST(req: NextRequest) {
     slug: String(body.slug),
     description: body.description ?? undefined,
     price: price,
-    stock: Number.isFinite(Number(body?.stock)) ? Number(body.stock) : 0,
+  stock: Number.isFinite(Number(body?.stock)) ? Number(body.stock) : 0,
+  discountPrice: discountPrice !== undefined ? discountPrice : undefined,
     vendorId: isAdmin && body.vendorId ? String(body.vendorId) : (vendor?.id as string),
     categoryId: body.categoryId || undefined,
   };
@@ -116,8 +141,24 @@ export async function PATCH(req: NextRequest) {
   const isOwner = ownerVendor?.id === existing.vendorId;
   if (!isAdmin && !isOwner) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  // Base product fields update
-  const updated = await prisma.product.update({
+  // Validate discountPrice if provided
+  if (body.discountPrice !== undefined) {
+    if (body.discountPrice === null) {
+      // null means remove discount
+    } else if (typeof body.discountPrice !== 'number' || body.discountPrice <= 0) {
+      return NextResponse.json({ error: 'Invalid discountPrice' }, { status: 400 });
+    } else if (typeof body.price === 'number') {
+      if (body.discountPrice >= body.price) {
+        return NextResponse.json({ error: 'discountPrice must be less than price' }, { status: 400 });
+      }
+    } else if (body.discountPrice >= Number(existing.price)) {
+      return NextResponse.json({ error: 'discountPrice must be less than current price' }, { status: 400 });
+    }
+  }
+
+  // Base product fields update (excluding images/video handled below)
+  // First update standard fields supported by current Prisma Client
+  await prisma.product.update({
     where: { id },
     data: {
       name: body.name ?? undefined,
@@ -127,8 +168,21 @@ export async function PATCH(req: NextRequest) {
       stock: typeof body.stock === 'number' ? body.stock : undefined,
       categoryId: body.categoryId ?? undefined,
     },
-    include: { images: true, video: true, vendor: { select: { id: true, shopName: true } } },
   });
+
+  // Apply discountPrice separately using raw SQL until Prisma Client is regenerated
+  if (body.discountPrice !== undefined) {
+    try {
+      if (body.discountPrice === null) {
+        await prisma.$executeRawUnsafe('UPDATE "Product" SET "discountPrice" = NULL WHERE id = $1', id);
+      } else if (typeof body.discountPrice === 'number') {
+        await prisma.$executeRawUnsafe('UPDATE "Product" SET "discountPrice" = $1 WHERE id = $2', body.discountPrice, id);
+      }
+    } catch (e: any) {
+      // Column probably not migrated yet; log and continue without failing entire request
+      console.warn('discountPrice column update skipped (missing migration?):', e?.message);
+    }
+  }
 
   // If images provided, replace all images atomically
   if (Array.isArray(body.images)) {
